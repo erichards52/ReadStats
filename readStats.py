@@ -151,5 +151,5 @@ for read in bamfile.fetch():
 
 
 with open (str(path) + '/quickAlStats/' + bamBase + 'quickAlStats_read_arrays.csv',"w") as csv_file:
-#    fieldnames = ['Read_Names', 'Read_Length','Alignment_Identity','Error_Rate_SNV,'Error_Rate_Del','Error_Rate_Nn','Error_Rate_INS','NN','NM','INS','DEL','Matches',Quals']
-    csv.writer(csv_file).writerows([k, *v] for k,v in d.items())
+    csv.writer(csv_file).writerow(["Read_Names", "Read_Length","Alignment_Identity","Error_Rate_SNV","Error_Rate_Del","Error_Rate_Nn","Error_Rate_INS","NN","NM","INS","DEL","Matches","Quals"])
+    csv.writer(csv_file,delimiter = ",").writerows([k, *v] for k,v in d.items())
