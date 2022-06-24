@@ -1,3 +1,4 @@
+#!/resources/tools/apps/software/lang/Python/3.7.4-GCCcore-8.3.0/bin/python
 # Import libraries
 import pysam
 import numpy as np
@@ -7,6 +8,7 @@ import sys
 import os
 import csv
 from collections import defaultdict
+from sqlitedict import SqliteDict
 from math import log
 from pathlib import Path
 
@@ -21,31 +23,35 @@ path = svPath.parent.absolute()
 #sys.stdout = open(str(path) + '/quickAlStats/' + bamBase + 'quickAlStats_read_arrays.txt', 'w')
 
 # Define variables
-readCount=0
-suppleCount=0
-secondCount=0
-suppleBps=0
-primaryReads=0
-primaryBps=0
-bps=0
-unmappedReads=0
-unmappedbps=0
-alignedbps=0
-supplealignedbps=0
 readLenList=[]
 readNames=[]
 readSeqs=[]
-qualityList=[]
-alignQuals=[]
-alignQualsSNV=[]
-alignQualsDel=[]
-alignQualsIns=[]
-alignQualsNn=[]
 percentIdent=0.0
 qualityListPrim=[]
-d = {}
-dqual = {}
+keyNames=[]
+d = SqliteDict("read_stats_upgrade.sqlite")
+dqual = SqliteDict("read_quals_upgrade.sqlite")
+dpqual = SqliteDict("prim_read_quals_upgrade.sqlite")
 temp_quality_vals=[]
+ptemp_quality_vals=[]
+accuracy=0
+accuracy_SNV=0
+accuracy_Del=0
+accuracy_Nn=0
+accuracy_Ins=0
+nn=0
+nm=0
+ins=0
+dels=0
+matches=0
+mq=0
+suppleBps=0
+supplealignedbps=0
+primaryBps=0
+primaryalignedbps=0
+mqPrim=0
+temp_suppleBps=0
+temp_supplealignedbps=0
 
 def errs_tab(n):
     return [10**(q / -10) for q in range(n+1)]
@@ -56,22 +62,39 @@ tab=errs_tab(128)
 bamfile = pysam.AlignmentFile(bamName, "rb")
     
 # Look for unmapped reads (ONLY WORKS IN THIS LOOP W/ PYSAM UNTIL_EOF
-for r in bamfile.fetch(until_eof=True):
-    if r.is_unmapped:
-        unmappedReads += 1
-        unmappedbps += r.query_length                        
+# for r in bamfile.fetch(until_eof=True):
+ #    if r.is_unmapped:
+  #       unmappedReads += 1
+   #      unmappedbps += r.query_length                        
 
 # Second read in bamfile to return all relevant variables
 for read in bamfile.fetch():
-
+    accuracy=0
+    accuracy_SNV=0
+    accuracy_Del=0
+    accuracy_Nn=0
+    accuracy_Ins=0
+    nn=0
+    nm=0
+    ins=0
+    dels=0
+    matches=0
+    mq=0
+    suppleBps=0
+    supplealignedbps=0
+    primaryBps=0
+    primaryalignedbps=0
+    mqPrim=0
+    temp_suppleBps=0
+    temp_supplealignedbps=0
+    temp_mq=0
     if read.is_unmapped:
         pass
     else:
-        readCount += 1
-        bps += read.query_length
         key = read.query_name
-        if d.__contains__(key):
-            print("Dict already contains "+key)
+#        if d.__contains__(key):
+#        if key in d.keys():
+        if key in d:
             tempReadLen=read.query_length + d[key][0]
             temp_cig_stats_counts = read.get_cigar_stats()[0]
             temp_nn=d[key][6]
@@ -93,17 +116,33 @@ for read in bamfile.fetch():
             temp_accuracy_Nn = float(temp_nn) / (temp_matches_calc + temp_nm) * 100
             # Calculate quality
             dqual[key].extend(read.query_qualities)
-            for l in range(len(dqual[key])):
-                temp_quality_vals.append(dqual[key][l])
             sum_prob = 0.0
-            if temp_quality_vals:
-                temp_mq = -10 * log(sum([tab[q] for q in temp_quality_vals]) / len(temp_quality_vals), 10)
-            d[key] = [tempReadLen, temp_accuracy,temp_accuracy_SNV,temp_accuracy_Del,temp_accuracy_Ins,temp_accuracy_Nn,temp_nn,temp_nm,temp_ins,temp_dels,temp_matches,temp_mq]
+            temp_mq = -10 * log(sum([tab[q] for q in dqual[key]]) / len(dqual[key]), 10)
+            if read.is_unmapped:
+                pass
+
+            elif read.is_supplementary:
+                temp_suppleBps = read.query_length + d[key][12]
+                temp_supplealignedbps = read.query_alignment_length + d[key][13]
+                d[key]=tempReadLen, temp_accuracy,temp_accuracy_SNV,temp_accuracy_Del,temp_accuracy_Ins,temp_accuracy_Nn,temp_nn,temp_nm,temp_ins,temp_dels,temp_matches,temp_mq,temp_suppleBps,temp_supplealignedbps,d[key][14],d[key][15],d[key][16],d[key][17],key
+            elif read.is_secondary:
+                pass
+            else:
+                primaryBps = read.query_length + d[key][14]
+                primaryalignedbps = read.query_alignment_length + d[key][15]
+                qualityPrim = read.query_qualities
+                dpqual[key]=read.query_qualities
+                sum_prob = 0.0
+                mqPrim = -10 * log(sum([tab[q] for q in dpqual[key]]) / len(dpqual[key]), 10)
+                d[key]=tempReadLen, temp_accuracy,temp_accuracy_SNV,temp_accuracy_Del,temp_accuracy_Ins,temp_accuracy_Nn,temp_nn,temp_nm,temp_ins,temp_dels,temp_matches,temp_mq,d[key][12],d[key][13],primaryBps,primaryalignedbps,mqPrim,read.mapping_quality,key
+                print(d[key])
         else:
-            d.setdefault(key, [])
             dqual.setdefault(key, [])
-            
+            dpqual.setdefault(key, [])   
+                     
+            readLen=read.query_length
             # Calculate accuracy
+            
             cig_stats_counts = read.get_cigar_stats()[0]
             try:
                 nn = read.get_tag('nn')
@@ -125,31 +164,24 @@ for read in bamfile.fetch():
             quality = read.query_qualities
             dqual[key]=read.query_qualities
             sum_prob = 0.0
-            if quality:
-                mq = -10 * log(sum([tab[q] for q in quality]) / len(quality), 10)
-                d[key].append(mq)
-            d[key]=[read.query_length,accuracy,accuracy_SNV,accuracy_Del,accuracy_Nn,accuracy_Ins,nn,nm,ins,dels,matches,mq]
+            mq = -10 * log(sum([tab[q] for q in dqual[key]]) / len(dqual[key]), 10)
+            if read.is_unmapped:
+                pass
         
-    if read.is_unmapped:
-        pass
-        
-    elif read.is_supplementary:
-        suppleCount += 1
-        suppleBps += read.query_length
-        supplealignedbps += read.query_alignment_length
-    elif read.is_secondary:
-        secondCount += 1
-    else:
-        primaryReads += 1
-        primaryBps += read.query_length
-        alignedbps += read.query_alignment_length
-        qualityPrim = read.query_qualities
-        sum_prob = 0.0
-        if qualityPrim:
-            mqPrim = -10 * log(sum([tab[q] for q in qualityPrim]) / len(qualityPrim), 10)
-            qualityListPrim.append(mqPrim)
-
-
-with open (str(path) + '/quickAlStats/' + bamBase + 'quickAlStats_read_arrays.csv',"w") as csv_file:
-    csv.writer(csv_file).writerow(["Read_Names", "Read_Length","Alignment_Identity","Error_Rate_SNV","Error_Rate_Del","Error_Rate_Nn","Error_Rate_INS","NN","NM","INS","DEL","Matches","Quals"])
-    csv.writer(csv_file,delimiter = ",").writerows([k, *v] for k,v in d.items())
+            elif read.is_supplementary:
+                suppleBps = read.query_length
+                supplealignedbps = read.query_alignment_length
+                d[key]=readLen,accuracy,accuracy_SNV,accuracy_Del,accuracy_Nn,accuracy_Ins,nn,nm,ins,dels,matches,mq,suppleBps,supplealignedbps,primaryBps,primaryalignedbps,mqPrim,read.mapping_quality,key
+            elif read.is_secondary:
+                pass
+            else:
+                primaryBps = read.query_length
+                primaryalignedbps = read.query_alignment_length
+                qualityPrim = read.query_qualities
+                dpqual[key]=qualityPrim
+                sum_prob = 0.0
+                mqPrim = -10 * log(sum([tab[q] for q in dpqual[key]]) / len(dpqual[key]), 10)
+                d[key]=readLen,accuracy,accuracy_SNV,accuracy_Del,accuracy_Nn,accuracy_Ins,nn,nm,ins,dels,matches,mq,suppleBps,supplealignedbps,primaryBps,primaryalignedbps,mqPrim,read.mapping_quality,key
+                print(d[key])
+d.commit()
+d.close()
