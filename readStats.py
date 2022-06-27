@@ -11,6 +11,8 @@ from collections import defaultdict
 from sqlitedict import SqliteDict
 from math import log
 from pathlib import Path
+import pickle
+from sqlitedict import decode
 
 bamName=sys.argv[1]
 bamBase = os.path.basename(bamName)
@@ -29,7 +31,7 @@ readSeqs=[]
 percentIdent=0.0
 qualityListPrim=[]
 keyNames=[]
-d = SqliteDict("read_stats_upgrade.sqlite")
+d = SqliteDict("read_stats_upgrade.sqlite", tablename="reads")
 dqual = SqliteDict("read_quals_upgrade.sqlite")
 dpqual = SqliteDict("prim_read_quals_upgrade.sqlite")
 temp_quality_vals=[]
@@ -124,7 +126,8 @@ for read in bamfile.fetch():
             elif read.is_supplementary:
                 temp_suppleBps = read.query_length + d[key][12]
                 temp_supplealignedbps = read.query_alignment_length + d[key][13]
-                d[key]=tempReadLen, temp_accuracy,temp_accuracy_SNV,temp_accuracy_Del,temp_accuracy_Ins,temp_accuracy_Nn,temp_nn,temp_nm,temp_ins,temp_dels,temp_matches,temp_mq,temp_suppleBps,temp_supplealignedbps,d[key][14],d[key][15],d[key][16],d[key][17],key
+                d[key]= tempReadLen, temp_accuracy,temp_accuracy_SNV,temp_accuracy_Del,temp_accuracy_Ins,temp_accuracy_Nn,temp_nn,temp_nm,temp_ins,temp_dels,temp_matches,temp_mq,temp_suppleBps,temp_supplealignedbps,d[key][14],d[key][15],d[key][16],d[key][17]
+                
             elif read.is_secondary:
                 pass
             else:
@@ -134,11 +137,11 @@ for read in bamfile.fetch():
                 dpqual[key]=read.query_qualities
                 sum_prob = 0.0
                 mqPrim = -10 * log(sum([tab[q] for q in dpqual[key]]) / len(dpqual[key]), 10)
-                d[key]=tempReadLen, temp_accuracy,temp_accuracy_SNV,temp_accuracy_Del,temp_accuracy_Ins,temp_accuracy_Nn,temp_nn,temp_nm,temp_ins,temp_dels,temp_matches,temp_mq,d[key][12],d[key][13],primaryBps,primaryalignedbps,mqPrim,read.mapping_quality,key
+                d[key]=tempReadLen, temp_accuracy,temp_accuracy_SNV,temp_accuracy_Del,temp_accuracy_Ins,temp_accuracy_Nn,temp_nn,temp_nm,temp_ins,temp_dels,temp_matches,temp_mq,d[key][12],d[key][13],primaryBps,primaryalignedbps,mqPrim,read.mapping_quality
                 print(d[key])
         else:
-            dqual.setdefault(key, [])
-            dpqual.setdefault(key, [])   
+#            dqual.setdefault(key, [])
+#            dpqual.setdefault(key, [])   
                      
             readLen=read.query_length
             # Calculate accuracy
@@ -171,7 +174,7 @@ for read in bamfile.fetch():
             elif read.is_supplementary:
                 suppleBps = read.query_length
                 supplealignedbps = read.query_alignment_length
-                d[key]=readLen,accuracy,accuracy_SNV,accuracy_Del,accuracy_Nn,accuracy_Ins,nn,nm,ins,dels,matches,mq,suppleBps,supplealignedbps,primaryBps,primaryalignedbps,mqPrim,read.mapping_quality,key
+                d[key]=readLen,accuracy,accuracy_SNV,accuracy_Del,accuracy_Nn,accuracy_Ins,nn,nm,ins,dels,matches,mq,suppleBps,supplealignedbps,primaryBps,primaryalignedbps,mqPrim,read.mapping_quality
             elif read.is_secondary:
                 pass
             else:
@@ -181,7 +184,10 @@ for read in bamfile.fetch():
                 dpqual[key]=qualityPrim
                 sum_prob = 0.0
                 mqPrim = -10 * log(sum([tab[q] for q in dpqual[key]]) / len(dpqual[key]), 10)
-                d[key]=readLen,accuracy,accuracy_SNV,accuracy_Del,accuracy_Nn,accuracy_Ins,nn,nm,ins,dels,matches,mq,suppleBps,supplealignedbps,primaryBps,primaryalignedbps,mqPrim,read.mapping_quality,key
+                d[key]=readLen,accuracy,accuracy_SNV,accuracy_Del,accuracy_Nn,accuracy_Ins,nn,nm,ins,dels,matches,mq,suppleBps,supplealignedbps,primaryBps,primaryalignedbps,mqPrim,read.mapping_quality
                 print(d[key])
-d.commit()
+
+with open (str(path) + bamBase + '_per_read_stats.csv','w', newline='') as csv_file:
+    csv.writer(csv_file).writerows([k, *v] for k,v in d.items())
+
 d.close()
