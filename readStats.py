@@ -10,8 +10,7 @@ from collections import defaultdict
 from sqlitedict import SqliteDict
 from math import log
 from pathlib import Path
-import pickle
-from sqlitedict import decode
+
 
 bamName=sys.argv[1]
 bamBase = os.path.basename(bamName)
