@@ -1,4 +1,3 @@
-#!/resources/tools/apps/software/lang/Python/3.7.4-GCCcore-8.3.0/bin/python
 # Import libraries
 import pysam
 import numpy as np
